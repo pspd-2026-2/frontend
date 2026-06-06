@@ -48,6 +48,11 @@ form.addEventListener('submit', async (e) => {
     merchant: form.merchant.value.trim(),
   };
 
+  const userId = form.user_id ? form.user_id.value.trim() : '';
+  const ipAddress = form.ip_address ? form.ip_address.value.trim() : '';
+  if (userId) payload.user_id = userId;
+  if (ipAddress) payload.ip_address = ipAddress;
+
   if (!validate(payload)) return;
 
   setLoading(true, protocol);

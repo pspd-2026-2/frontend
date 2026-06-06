@@ -74,6 +74,24 @@
               placeholder="Nome da loja / serviço" required>
           </div>
 
+          <details class="demo-fields">
+            <summary>Campos para demo de fraude <span class="demo-hint">(opcional)</span></summary>
+            <div class="field-row two-col demo-inner">
+              <div class="field-group">
+                <label for="user_id">User ID</label>
+                <input type="text" id="user_id" name="user_id"
+                  placeholder="ex: user-999 (alta velocidade)">
+              </div>
+              <div class="field-group">
+                <label for="ip_address">IP Address</label>
+                <input type="text" id="ip_address" name="ip_address"
+                  placeholder="ex: 172.16.254.1 (blocklist)">
+              </div>
+            </div>
+            <p class="demo-tip">IPs na blocklist: <code>172.16.254.1</code> · <code>192.168.1.100</code> · <code>10.0.0.55</code><br>
+            Usuário de alta velocidade: <code>user-999</code> (6+ transações anteriores → revisão)</p>
+          </details>
+
           <div class="protocol-selector">
             <span class="protocol-label">Backend Protocol:</span>
             <label class="radio-pill">
@@ -139,11 +157,11 @@
               <span id="res-latency"></span>
             </div>
             <div class="result-row perf-row">
-              <span>Antifraude (A)</span>
+              <span>Antifraude (service-b)</span>
               <span id="res-t-antifraud"></span>
             </div>
             <div class="result-row perf-row">
-              <span>Autorizador (B)</span>
+              <span>Autorizador (service-a)</span>
               <span id="res-t-authorizer"></span>
             </div>
           </div>
