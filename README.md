@@ -27,6 +27,13 @@ docker run -p 80:80 pspd-frontend
 # Acesse http://localhost
 ```
 
+Imagem publicada pelo CI no GitHub Packages:
+
+```bash
+docker pull ghcr.io/pspd-2026-2/frontend:latest
+docker run -p 80:80 ghcr.io/pspd-2026-2/frontend:latest
+```
+
 O container nginx serve os estáticos e faz proxy de `/api/` para o container
 `gateway` (resolução via DNS interno Docker / K8s Service).
 
