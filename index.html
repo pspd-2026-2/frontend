@@ -1,184 +1,442 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PayDistrib — Pagamento Seguro</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="page">
-    <header class="site-header">
-      <div class="logo">⬡ PayDistrib</div>
-      <span class="subtitle">Sistema de Pagamento Distribuído · gRPC + Microserviços</span>
-    </header>
-
-    <main class="checkout-container">
-      <section class="card-form-section">
-        <h2>Dados do Cartão</h2>
-
-        <form id="payment-form" novalidate>
-          <div class="field-group">
-            <label for="card_number">Número do Cartão</label>
-            <input type="text" id="card_number" name="card_number"
-              placeholder="0000 0000 0000 0000" maxlength="19" autocomplete="cc-number" required>
-          </div>
-
-          <div class="field-row">
-            <div class="field-group">
-              <label for="card_holder">Titular</label>
-              <input type="text" id="card_holder" name="card_holder"
-                placeholder="Nome como no cartão" autocomplete="cc-name" required>
-            </div>
-          </div>
-
-          <div class="field-row two-col">
-            <div class="field-group">
-              <label for="expiry">Validade</label>
-              <input type="text" id="expiry" name="expiry"
-                placeholder="MM/AA" maxlength="5" autocomplete="cc-exp" required>
-            </div>
-            <div class="field-group">
-              <label for="cvv">CVV</label>
-              <input type="text" id="cvv" name="cvv"
-                placeholder="000" maxlength="4" autocomplete="cc-csc" required>
-            </div>
-          </div>
-
-          <hr class="divider">
-
-          <h2>Detalhes do Pagamento</h2>
-
-          <div class="field-row two-col">
-            <div class="field-group">
-              <label for="amount">Valor</label>
-              <div class="input-prefix-wrap">
-                <span class="prefix" id="currency-prefix">R$</span>
-                <input type="number" id="amount" name="amount"
-                  placeholder="0,00" min="0.01" step="0.01" required>
-              </div>
-            </div>
-            <div class="field-group">
-              <label for="currency">Moeda</label>
-              <select id="currency" name="currency">
-                <option value="BRL" selected>BRL — Real</option>
-                <option value="USD">USD — Dólar</option>
-                <option value="EUR">EUR — Euro</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="field-group">
-            <label for="merchant">Estabelecimento</label>
-            <input type="text" id="merchant" name="merchant"
-              placeholder="Nome da loja / serviço" required>
-          </div>
-
-          <details class="demo-fields">
-            <summary>Campos para demo de fraude <span class="demo-hint">(opcional)</span></summary>
-            <div class="field-row two-col demo-inner">
-              <div class="field-group">
-                <label for="user_id">User ID</label>
-                <input type="text" id="user_id" name="user_id"
-                  placeholder="ex: user-999 (alta velocidade)">
-              </div>
-              <div class="field-group">
-                <label for="ip_address">IP Address</label>
-                <input type="text" id="ip_address" name="ip_address"
-                  placeholder="ex: 172.16.254.1 (blocklist)">
-              </div>
-            </div>
-            <p class="demo-tip">IPs na blocklist: <code>172.16.254.1</code> · <code>192.168.1.100</code> · <code>10.0.0.55</code><br>
-            Usuário de alta velocidade: <code>user-999</code> (6+ transações anteriores → revisão)</p>
-          </details>
-
-          <div class="protocol-selector">
-            <span class="protocol-label">Backend Protocol:</span>
-            <label class="radio-pill">
-              <input type="radio" name="protocol" value="grpc" checked>
-              <span>gRPC / HTTP2</span>
-            </label>
-            <label class="radio-pill">
-              <input type="radio" name="protocol" value="rest">
-              <span>REST / JSON</span>
-            </label>
-          </div>
-
-          <button type="submit" id="pay-btn" class="pay-button">
-            <span id="btn-text">Pagar Agora</span>
-            <span id="btn-spinner" class="spinner hidden" aria-hidden="true"></span>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PayDistrib — Pagamento Seguro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <div class="logo">⬡ PayDistrib</div>
+        <span class="subtitle"
+          >Sistema de Pagamento Distribuído · gRPC + Microserviços</span
+        >
+        <nav class="tab-nav">
+          <button
+            class="tab-btn active"
+            data-tab="checkout"
+            onclick="switchTab('checkout')"
+          >
+            Checkout
           </button>
-        </form>
-      </section>
+          <button
+            class="tab-btn"
+            data-tab="loadtest"
+            onclick="switchTab('loadtest')"
+          >
+            Teste de Carga
+          </button>
+          <button
+            class="tab-btn"
+            data-tab="dashboard"
+            onclick="switchTab('dashboard')"
+          >
+            Dashboard
+          </button>
+        </nav>
+      </header>
 
-      <section class="result-section" id="result-section" aria-live="polite">
-        <div class="result-placeholder" id="result-placeholder">
-          <div class="placeholder-icon">🔒</div>
-          <p>O resultado da transação aparecerá aqui.</p>
-        </div>
+      <!-- ── Presets bar (visible in checkout tab) ── -->
+      <div class="presets-bar" id="presets-bar">
+        <span class="presets-label">Cenários de teste:</span>
+        <div class="presets-list" id="presets-list"></div>
+      </div>
 
-        <div class="result-card hidden" id="result-card">
-          <div class="result-header" id="result-header">
-            <span class="result-icon" id="result-icon"></span>
-            <span class="result-status" id="result-status"></span>
+      <main>
+        <!-- ═══════════════════ VIEW: CHECKOUT ═══════════════════ -->
+        <section id="view-checkout" class="checkout-container">
+          <section class="card-form-section">
+            <h2>Dados do Cartão</h2>
+
+            <form id="payment-form" novalidate>
+              <div class="field-group">
+                <label for="card_number">Número do Cartão</label>
+                <input
+                  type="text"
+                  id="card_number"
+                  name="card_number"
+                  placeholder="0000 0000 0000 0000"
+                  maxlength="19"
+                  autocomplete="cc-number"
+                  required
+                />
+              </div>
+
+              <div class="field-row">
+                <div class="field-group">
+                  <label for="card_holder">Titular</label>
+                  <input
+                    type="text"
+                    id="card_holder"
+                    name="card_holder"
+                    placeholder="Nome como no cartão"
+                    autocomplete="cc-name"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div class="field-row two-col">
+                <div class="field-group">
+                  <label for="expiry">Validade</label>
+                  <input
+                    type="text"
+                    id="expiry"
+                    name="expiry"
+                    placeholder="MM/AA"
+                    maxlength="5"
+                    autocomplete="cc-exp"
+                    required
+                  />
+                </div>
+                <div class="field-group">
+                  <label for="cvv">CVV</label>
+                  <input
+                    type="text"
+                    id="cvv"
+                    name="cvv"
+                    placeholder="000"
+                    maxlength="4"
+                    autocomplete="cc-csc"
+                    required
+                  />
+                </div>
+              </div>
+
+              <hr class="divider" />
+
+              <h2>Detalhes do Pagamento</h2>
+
+              <div class="field-row two-col">
+                <div class="field-group">
+                  <label for="amount">Valor</label>
+                  <div class="input-prefix-wrap">
+                    <span class="prefix" id="currency-prefix">R$</span>
+                    <input
+                      type="number"
+                      id="amount"
+                      name="amount"
+                      placeholder="0,00"
+                      min="0.01"
+                      step="0.01"
+                      required
+                    />
+                  </div>
+                </div>
+                <div class="field-group">
+                  <label for="currency">Moeda</label>
+                  <select id="currency" name="currency">
+                    <option value="BRL" selected>BRL — Real</option>
+                    <option value="USD">USD — Dólar</option>
+                    <option value="EUR">EUR — Euro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field-group">
+                <label for="merchant">Estabelecimento</label>
+                <input
+                  type="text"
+                  id="merchant"
+                  name="merchant"
+                  placeholder="Nome da loja / serviço"
+                  required
+                />
+              </div>
+
+              <div class="field-row two-col">
+                <div class="field-group">
+                  <label for="user_id"
+                    >User ID <span class="required-mark">*</span></label
+                  >
+                  <input
+                    type="text"
+                    id="user_id"
+                    name="user_id"
+                    placeholder="ex: user-clean"
+                    required
+                  />
+                </div>
+                <div class="field-group">
+                  <label for="ip_address"
+                    >IP Address <span class="required-mark">*</span></label
+                  >
+                  <input
+                    type="text"
+                    id="ip_address"
+                    name="ip_address"
+                    placeholder="ex: 10.10.10.1"
+                    required
+                  />
+                </div>
+              </div>
+              <p class="demo-tip">
+                IPs na blocklist: <code>172.16.254.1</code> ·
+                <code>192.168.1.100</code> · <code>10.0.0.55</code> ·
+                <code>203.0.113.7</code><br />
+                Usuário alta velocidade: <code>user-999</code> ·
+                <code>user-fraudster</code> (6+ transações → revisão)
+              </p>
+
+              <div class="protocol-selector">
+                <span class="protocol-label">Backend Protocol:</span>
+                <label class="radio-pill">
+                  <input type="radio" name="protocol" value="grpc" checked />
+                  <span>gRPC / HTTP2</span>
+                </label>
+                <label class="radio-pill">
+                  <input type="radio" name="protocol" value="rest" />
+                  <span>REST / JSON</span>
+                </label>
+              </div>
+
+              <button type="submit" id="pay-btn" class="pay-button">
+                <span id="btn-text">Pagar Agora</span>
+                <span
+                  id="btn-spinner"
+                  class="spinner hidden"
+                  aria-hidden="true"
+                ></span>
+              </button>
+            </form>
+          </section>
+
+          <section
+            class="result-section"
+            id="result-section"
+            aria-live="polite"
+          >
+            <div class="result-placeholder" id="result-placeholder">
+              <div class="placeholder-icon">🔒</div>
+              <p>O resultado da transação aparecerá aqui.</p>
+            </div>
+
+            <div class="result-card hidden" id="result-card">
+              <div class="result-header" id="result-header">
+                <span class="result-icon" id="result-icon"></span>
+                <span class="result-status" id="result-status"></span>
+              </div>
+              <div class="result-body">
+                <div class="result-row">
+                  <span>ID da Transação</span>
+                  <code id="res-tx-id"></code>
+                </div>
+                <div class="result-row" id="row-reason" style="display: none">
+                  <span>Motivo</span>
+                  <strong id="res-reason"></strong>
+                </div>
+                <div class="result-row">
+                  <span>Score de Fraude</span>
+                  <span id="res-fraud-score"></span>
+                </div>
+                <div class="result-row">
+                  <span>Nível de Risco</span>
+                  <span id="res-risk" class="badge"></span>
+                </div>
+                <div class="result-row" id="row-auth-code">
+                  <span>Código de Autorização</span>
+                  <code id="res-auth-code"></code>
+                </div>
+                <div class="result-row" id="row-balance">
+                  <span>Limite Disponível Restante</span>
+                  <span id="res-balance"></span>
+                </div>
+                <hr class="divider" />
+                <div class="result-row perf-row">
+                  <span>Protocolo usado</span>
+                  <span id="res-protocol" class="proto-badge"></span>
+                </div>
+                <div class="result-row perf-row">
+                  <span>Latência total</span>
+                  <span id="res-latency"></span>
+                </div>
+                <div class="result-row perf-row">
+                  <span>Antifraude (service-b)</span>
+                  <span id="res-t-antifraud"></span>
+                </div>
+                <div class="result-row perf-row">
+                  <span>Autorizador (service-a)</span>
+                  <span id="res-t-authorizer"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="result-error hidden" id="result-error">
+              <div class="result-icon">⚠️</div>
+              <p id="error-msg"></p>
+            </div>
+          </section>
+        </section>
+
+        <!-- ═══════════════════ VIEW: LOAD TEST ═══════════════════ -->
+        <section id="view-loadtest" class="loadtest-container" hidden>
+          <div class="lt-card">
+            <h2 class="lt-card-title">Teste de Carga — gRPC vs REST</h2>
+            <div class="lt-card-body">
+              <div class="field-row two-col">
+                <div class="field-group">
+                  <label for="lt-n">Requisições por protocolo</label>
+                  <input type="number" id="lt-n" value="20" min="1" max="500" />
+                </div>
+                <div class="field-group">
+                  <label for="lt-protocol">Protocolo</label>
+                  <select id="lt-protocol">
+                    <option value="both">Ambos (gRPC + REST)</option>
+                    <option value="grpc">Somente gRPC</option>
+                    <option value="rest">Somente REST</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row two-col">
+                <div class="field-group">
+                  <label for="lt-concurrency">Requisições simultâneas</label>
+                  <input
+                    type="number"
+                    id="lt-concurrency"
+                    value="1"
+                    min="1"
+                    max="50"
+                  />
+                </div>
+                <div class="field-group">
+                  <label for="lt-scenario">Cenário de teste</label>
+                  <select id="lt-scenario"></select>
+                </div>
+              </div>
+              <button
+                type="button"
+                id="lt-btn"
+                class="lt-run-btn"
+                onclick="runLoadTest()"
+              >
+                <span id="lt-btn-text">Rodar Teste de Carga</span>
+                <span id="lt-spinner" class="spinner hidden"></span>
+              </button>
+              <div id="lt-progress" class="lt-progress hidden">
+                <div class="lt-bar-track">
+                  <div class="lt-bar-fill" id="lt-bar-fill"></div>
+                </div>
+                <span id="lt-status" class="lt-status-text"></span>
+              </div>
+              <div id="lt-summary" class="lt-summary hidden"></div>
+            </div>
           </div>
-          <div class="result-body">
-            <div class="result-row">
-              <span>ID da Transação</span>
-              <code id="res-tx-id"></code>
-            </div>
-            <div class="result-row" id="row-reason" style="display:none">
-              <span>Motivo</span>
-              <strong id="res-reason"></strong>
-            </div>
-            <div class="result-row">
-              <span>Score de Fraude</span>
-              <span id="res-fraud-score"></span>
-            </div>
-            <div class="result-row">
-              <span>Nível de Risco</span>
-              <span id="res-risk" class="badge"></span>
-            </div>
-            <div class="result-row" id="row-auth-code">
-              <span>Código de Autorização</span>
-              <code id="res-auth-code"></code>
-            </div>
-            <div class="result-row" id="row-balance">
-              <span>Saldo Restante</span>
-              <span id="res-balance"></span>
-            </div>
-            <hr class="divider">
-            <div class="result-row perf-row">
-              <span>Protocolo usado</span>
-              <span id="res-protocol" class="proto-badge"></span>
-            </div>
-            <div class="result-row perf-row">
-              <span>Latência total</span>
-              <span id="res-latency"></span>
-            </div>
-            <div class="result-row perf-row">
-              <span>Antifraude (service-b)</span>
-              <span id="res-t-antifraud"></span>
-            </div>
-            <div class="result-row perf-row">
-              <span>Autorizador (service-a)</span>
-              <span id="res-t-authorizer"></span>
+        </section>
+
+        <!-- ═══════════════════ VIEW: DASHBOARD ═══════════════════ -->
+        <section id="view-dashboard" class="dashboard-container" hidden>
+          <div class="dash-toolbar">
+            <h2 class="dash-title">Dashboard — Comparativo gRPC vs REST</h2>
+            <div class="dash-actions">
+              <button class="btn-secondary" onclick="loadDashboard()">
+                ↻ Atualizar
+              </button>
+              <button class="btn-danger" onclick="clearHistory()">
+                Limpar histórico
+              </button>
             </div>
           </div>
-        </div>
 
-        <div class="result-error hidden" id="result-error">
-          <div class="result-icon">⚠️</div>
-          <p id="error-msg"></p>
-        </div>
-      </section>
-    </main>
+          <div id="dash-verdict" class="dash-verdict hidden"></div>
 
-    <footer class="site-footer">
-      PSPD — UnB/FCTE · Microserviços gRPC · Kubernetes
-    </footer>
-  </div>
+          <div id="dash-empty" class="dash-empty">
+            Nenhuma requisição registrada. Faça um pagamento ou rode um teste de
+            carga.
+          </div>
 
-  <script src="app.js"></script>
-</body>
+          <!-- Stats comparison table -->
+          <div id="dash-stats" class="dash-stats-wrap hidden">
+            <h3 class="dash-section-title">Estatísticas de Latência (ms)</h3>
+            <div class="stats-table-wrap">
+              <table class="stats-table">
+                <thead>
+                  <tr>
+                    <th>Protocolo</th>
+                    <th>Requisições</th>
+                    <th>Média</th>
+                    <th>p50</th>
+                    <th>p95</th>
+                    <th>Min</th>
+                    <th>Max</th>
+                    <th>% Aprovação</th>
+                  </tr>
+                </thead>
+                <tbody id="stats-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Bar charts -->
+          <div id="dash-bars" class="dash-bars-wrap hidden">
+            <h3 class="dash-section-title">Comparativo Visual</h3>
+            <div class="bars-grid">
+              <div class="bar-metric">
+                <div class="bar-metric-label">Latência Média (ms)</div>
+                <div class="bars-duo" id="bars-mean"></div>
+              </div>
+              <div class="bar-metric">
+                <div class="bar-metric-label">p95 Latência (ms)</div>
+                <div class="bars-duo" id="bars-p95"></div>
+              </div>
+              <div class="bar-metric">
+                <div class="bar-metric-label">Taxa de Aprovação (%)</div>
+                <div class="bars-duo" id="bars-approval"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- History table -->
+          <div id="dash-history" class="dash-history-wrap hidden">
+            <h3 class="dash-section-title">
+              Histórico de Requisições
+              <span id="hist-count" class="hist-count"></span>
+            </h3>
+            <div class="table-scroll">
+              <table class="history-table">
+                <thead>
+                  <tr>
+                    <th>Hora (UTC)</th>
+                    <th>Protocolo</th>
+                    <th>Status</th>
+                    <th>Valor</th>
+                    <th>Latência</th>
+                    <th>Antifraude</th>
+                    <th>Autorizador</th>
+                    <th>Risco</th>
+                    <th>Motivo / Estabelecimento</th>
+                  </tr>
+                </thead>
+                <tbody id="history-tbody"></tbody>
+              </table>
+            </div>
+            <div class="hist-pager">
+              <button
+                class="btn-secondary"
+                id="hist-prev"
+                onclick="goHistPage(-1)"
+              >
+                ‹ Anterior
+              </button>
+              <span class="hist-page-info" id="hist-page-info"></span>
+              <button
+                class="btn-secondary"
+                id="hist-next"
+                onclick="goHistPage(1)"
+              >
+                Próxima ›
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        PSPD — UnB/FCTE · Microserviços gRPC · Kubernetes
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
 </html>
