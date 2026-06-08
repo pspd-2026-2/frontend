@@ -277,7 +277,7 @@
             <div class="lt-card-body">
               <div class="field-row two-col">
                 <div class="field-group">
-                  <label for="lt-n">Requisições por protocolo</label>
+                  <label for="lt-n">Requisições por protocolo <small style="font-weight:normal;opacity:.7">(total = N × protocolos)</small></label>
                   <input type="number" id="lt-n" value="20" min="1" max="500" />
                 </div>
                 <div class="field-group">
@@ -291,7 +291,7 @@
               </div>
               <div class="field-row two-col">
                 <div class="field-group">
-                  <label for="lt-concurrency">Requisições simultâneas</label>
+                  <label for="lt-concurrency">Conexões simultâneas <small style="font-weight:normal;opacity:.7">(browser, aprox. — use perf_compare.py para medição precisa)</small></label>
                   <input
                     type="number"
                     id="lt-concurrency"

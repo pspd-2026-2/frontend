@@ -445,6 +445,11 @@ async function runLoadTest() {
   summary.classList.add("hidden");
   barFill.style.width = "0%";
 
+  // Clear previous run data so the dashboard reflects only this run
+  try {
+    await fetch(`${GATEWAY_URL}/api/history`, { method: "DELETE" });
+  } catch (_) {}
+
   // Build task list: [{protocol, scenario}]
   const tasks = [];
   for (const protocol of protocols) {
