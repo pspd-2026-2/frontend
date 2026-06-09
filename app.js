@@ -414,7 +414,6 @@ function showError(msg) {
   resultError.classList.remove("hidden");
 }
 
-// ─── Load test ────────────────────────────────────────────────────────────────
 async function runLoadTest() {
   const n = Math.max(1, parseInt(document.getElementById("lt-n").value) || 20);
   const proto = document.getElementById("lt-protocol").value;
@@ -422,14 +421,11 @@ async function runLoadTest() {
   const concurrency = Math.max(
     1,
     Math.min(
-      50,
-      parseInt(document.getElementById("lt-concurrency").value) || 1,
+      2000,
+      parseInt(document.getElementById("lt-concurrency").value) || 10,
     ),
   );
-  const isRandom = scenarioVal === "random";
-  const fixedScenario = isRandom ? null : PRESETS[parseInt(scenarioVal)];
 
-  const protocols = proto === "both" ? ["grpc", "rest"] : [proto];
   const ltBtn = document.getElementById("lt-btn");
   const ltBtnText = document.getElementById("lt-btn-text");
   const ltSpinner = document.getElementById("lt-spinner");
@@ -443,74 +439,74 @@ async function runLoadTest() {
   ltSpinner.classList.remove("hidden");
   progress.classList.remove("hidden");
   summary.classList.add("hidden");
-  barFill.style.width = "0%";
+  barFill.style.width = "5%";
 
-  // Clear previous run data so the dashboard reflects only this run
+  const totalRequests = n * (proto === "both" ? 2 : 1);
+  statusEl.textContent = `Iniciando ${totalRequests} requisições (${concurrency} workers)...`;
+
   try {
-    await fetch(`${GATEWAY_URL}/api/history`, { method: "DELETE" });
-  } catch (_) {}
+    // 1. Start the load test (returns immediately with job_id)
+    const startRes = await fetch(`${GATEWAY_URL}/api/loadtest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        n: n,
+        concurrency: concurrency,
+        protocol: proto,
+        scenario: scenarioVal,
+      }),
+    });
 
-  // Build task list: [{protocol, scenario}]
-  const tasks = [];
-  for (const protocol of protocols) {
-    for (let i = 0; i < n; i++) {
-      const scenario = isRandom
-        ? PRESETS[Math.floor(Math.random() * PRESETS.length)]
-        : fixedScenario;
-      tasks.push({ protocol, scenario });
+    if (!startRes.ok) {
+      const err = await startRes.json().catch(() => ({ detail: startRes.statusText }));
+      throw new Error(err.detail || "Erro ao iniciar teste de carga.");
     }
-  }
 
-  const results = {};
-  for (const p of protocols) results[p] = [];
+    const { job_id } = await startRes.json();
+    statusEl.textContent = `Job ${job_id} iniciado — aguardando workers...`;
 
-  const total = tasks.length;
-  let done = 0;
-  let taskIdx = 0;
-
-  async function worker() {
+    // 2. Poll for progress
+    let jobData;
     while (true) {
-      const idx = taskIdx++;
-      if (idx >= total) break;
-      const { protocol, scenario } = tasks[idx];
-      try {
-        const t0 = performance.now();
-        const res = await fetch(`${GATEWAY_URL}/api/payments`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Protocol": protocol,
-            "X-Source": "loadtest",
-          },
-          body: JSON.stringify(buildPresetPayload(scenario)),
-        });
-        const ms = Math.round(performance.now() - t0);
-        const data = res.ok ? await res.json() : null;
-        results[protocol].push({
-          ms,
-          status: data?.status || (res.ok ? "OK" : "ERROR"),
-        });
-      } catch (_) {
-        results[protocol].push({ ms: -1, status: "ERROR" });
+      await new Promise((r) => setTimeout(r, 300)); // poll every 300ms
+
+      const pollRes = await fetch(`${GATEWAY_URL}/api/loadtest/${job_id}`);
+      if (!pollRes.ok) {
+        throw new Error("Erro ao consultar progresso do teste.");
       }
-      done++;
-      barFill.style.width = `${(done / total) * 100}%`;
-      statusEl.textContent = `${done}/${total} · concorrência ${concurrency}`;
+
+      jobData = await pollRes.json();
+      const pct = Math.max(5, Math.round(jobData.progress * 100));
+      barFill.style.width = `${pct}%`;
+      statusEl.textContent = `${jobData.done}/${jobData.total} · ${pct}% · ${jobData.elapsed_s}s`;
+
+      if (jobData.status === "completed" || jobData.status === "error") {
+        break;
+      }
     }
+
+    if (jobData.status === "error") {
+      throw new Error(jobData.error || "Erro desconhecido no teste de carga.");
+    }
+
+    // 3. Show results
+    barFill.style.width = "100%";
+    statusEl.textContent = `Concluído — ${totalRequests} requisições em ${jobData.elapsed_s}s (${concurrency} workers).`;
+
+    renderLoadTestSummary(jobData.results, summary);
+    summary.classList.remove("hidden");
+
+    setTimeout(() => {
+      switchTab("dashboard");
+    }, 800);
+  } catch (err) {
+    statusEl.textContent = `Erro: ${err.message}`;
+    barFill.style.width = "0%";
+  } finally {
+    ltBtn.disabled = false;
+    ltBtnText.textContent = "Rodar Teste de Carga";
+    ltSpinner.classList.add("hidden");
   }
-
-  await Promise.all(Array.from({ length: concurrency }, worker));
-
-  ltBtn.disabled = false;
-  ltBtnText.textContent = "Rodar Teste de Carga";
-  ltSpinner.classList.add("hidden");
-  statusEl.textContent = `Concluído — ${total} requisições.`;
-  renderLoadTestSummary(results, summary);
-  summary.classList.remove("hidden");
-
-  setTimeout(() => {
-    switchTab("dashboard");
-  }, 800);
 }
 
 function computeLoadTestStats(times) {

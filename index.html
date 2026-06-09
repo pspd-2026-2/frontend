@@ -278,7 +278,7 @@
               <div class="field-row two-col">
                 <div class="field-group">
                   <label for="lt-n">Requisições por protocolo <small style="font-weight:normal;opacity:.7">(total = N × protocolos)</small></label>
-                  <input type="number" id="lt-n" value="20" min="1" max="500" />
+                  <input type="number" id="lt-n" value="100" min="1" max="10000" />
                 </div>
                 <div class="field-group">
                   <label for="lt-protocol">Protocolo</label>
@@ -291,13 +291,13 @@
               </div>
               <div class="field-row two-col">
                 <div class="field-group">
-                  <label for="lt-concurrency">Conexões simultâneas <small style="font-weight:normal;opacity:.7">(browser, aprox. — use perf_compare.py para medição precisa)</small></label>
+                  <label for="lt-concurrency">Conexões simultâneas <small style="font-weight:normal;opacity:.7">(executadas server-side, sem limite de browser)</small></label>
                   <input
                     type="number"
                     id="lt-concurrency"
-                    value="1"
+                    value="10"
                     min="1"
-                    max="50"
+                    max="2000"
                   />
                 </div>
                 <div class="field-group">
