@@ -153,7 +153,6 @@ function switchTab(tab) {
   document.querySelector(`[data-tab="${tab}"]`).classList.add("active");
 
   document.getElementById("view-checkout").hidden = tab !== "checkout";
-  document.getElementById("view-loadtest").hidden = tab !== "loadtest";
   document.getElementById("view-dashboard").hidden = tab !== "dashboard";
   document.getElementById("presets-bar").style.display =
     tab === "checkout" ? "" : "none";
@@ -164,15 +163,8 @@ function switchTab(tab) {
 // ─── Preset rendering ─────────────────────────────────────────────────────────
 function renderPresets() {
   const list = document.getElementById("presets-list");
-  const scenarioSelect = document.getElementById("lt-scenario");
 
   list.innerHTML = "";
-  scenarioSelect.innerHTML = "";
-
-  const randomOpt = document.createElement("option");
-  randomOpt.value = "random";
-  randomOpt.textContent = "🎲 Aleatório (mistura cenários)";
-  scenarioSelect.appendChild(randomOpt);
 
   PRESETS.forEach((p, i) => {
     const btn = document.createElement("button");
@@ -181,11 +173,6 @@ function renderPresets() {
     btn.textContent = p.label;
     btn.onclick = () => applyPreset(i);
     list.appendChild(btn);
-
-    const opt = document.createElement("option");
-    opt.value = i;
-    opt.textContent = p.label;
-    scenarioSelect.appendChild(opt);
   });
 }
 
@@ -274,6 +261,13 @@ form.addEventListener("submit", async (e) => {
 
     const data = await res.json();
     showResult(data, clientMs);
+
+    // fire-and-forget: report client-side latency so dashboard can show both
+    fetch(`${GATEWAY_URL}/api/history/client-latency`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ samples: [{ transaction_id: data.transaction_id, protocol, client_latency_ms: clientMs }] }),
+    }).catch(() => {});
   } catch (err) {
     showError(`Falha na conexão com o gateway: ${err.message}`);
   } finally {
@@ -414,143 +408,6 @@ function showError(msg) {
   resultError.classList.remove("hidden");
 }
 
-// ─── Load test ────────────────────────────────────────────────────────────────
-async function runLoadTest() {
-  const n = Math.max(1, parseInt(document.getElementById("lt-n").value) || 20);
-  const proto = document.getElementById("lt-protocol").value;
-  const scenarioVal = document.getElementById("lt-scenario").value;
-  const concurrency = Math.max(
-    1,
-    Math.min(
-      50,
-      parseInt(document.getElementById("lt-concurrency").value) || 1,
-    ),
-  );
-  const isRandom = scenarioVal === "random";
-  const fixedScenario = isRandom ? null : PRESETS[parseInt(scenarioVal)];
-
-  const protocols = proto === "both" ? ["grpc", "rest"] : [proto];
-  const ltBtn = document.getElementById("lt-btn");
-  const ltBtnText = document.getElementById("lt-btn-text");
-  const ltSpinner = document.getElementById("lt-spinner");
-  const progress = document.getElementById("lt-progress");
-  const statusEl = document.getElementById("lt-status");
-  const barFill = document.getElementById("lt-bar-fill");
-  const summary = document.getElementById("lt-summary");
-
-  ltBtn.disabled = true;
-  ltBtnText.textContent = "Rodando...";
-  ltSpinner.classList.remove("hidden");
-  progress.classList.remove("hidden");
-  summary.classList.add("hidden");
-  barFill.style.width = "0%";
-
-  // Clear previous run data so the dashboard reflects only this run
-  try {
-    await fetch(`${GATEWAY_URL}/api/history`, { method: "DELETE" });
-  } catch (_) {}
-
-  // Build task list: [{protocol, scenario}]
-  const tasks = [];
-  for (const protocol of protocols) {
-    for (let i = 0; i < n; i++) {
-      const scenario = isRandom
-        ? PRESETS[Math.floor(Math.random() * PRESETS.length)]
-        : fixedScenario;
-      tasks.push({ protocol, scenario });
-    }
-  }
-
-  const results = {};
-  for (const p of protocols) results[p] = [];
-
-  const total = tasks.length;
-  let done = 0;
-  let taskIdx = 0;
-
-  async function worker() {
-    while (true) {
-      const idx = taskIdx++;
-      if (idx >= total) break;
-      const { protocol, scenario } = tasks[idx];
-      try {
-        const t0 = performance.now();
-        const res = await fetch(`${GATEWAY_URL}/api/payments`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Protocol": protocol,
-            "X-Source": "loadtest",
-          },
-          body: JSON.stringify(buildPresetPayload(scenario)),
-        });
-        const ms = Math.round(performance.now() - t0);
-        const data = res.ok ? await res.json() : null;
-        results[protocol].push({
-          ms,
-          status: data?.status || (res.ok ? "OK" : "ERROR"),
-        });
-      } catch (_) {
-        results[protocol].push({ ms: -1, status: "ERROR" });
-      }
-      done++;
-      barFill.style.width = `${(done / total) * 100}%`;
-      statusEl.textContent = `${done}/${total} · concorrência ${concurrency}`;
-    }
-  }
-
-  await Promise.all(Array.from({ length: concurrency }, worker));
-
-  ltBtn.disabled = false;
-  ltBtnText.textContent = "Rodar Teste de Carga";
-  ltSpinner.classList.add("hidden");
-  statusEl.textContent = `Concluído — ${total} requisições.`;
-  renderLoadTestSummary(results, summary);
-  summary.classList.remove("hidden");
-
-  setTimeout(() => {
-    switchTab("dashboard");
-  }, 800);
-}
-
-function computeLoadTestStats(times) {
-  if (!times.length) return null;
-  const s = [...times].sort((a, b) => a - b);
-  const mean = s.reduce((a, b) => a + b, 0) / s.length;
-  const p50 = s[Math.floor(s.length * 0.5)];
-  const p95 = s[Math.floor(s.length * 0.95)];
-  return {
-    n: s.length,
-    mean: mean.toFixed(1),
-    p50,
-    p95,
-    min: s[0],
-    max: s[s.length - 1],
-  };
-}
-
-function renderLoadTestSummary(results, el) {
-  let html =
-    '<table class="lt-summary-table"><thead><tr><th>Protocolo</th><th>N</th><th>Média ms</th><th>p50</th><th>p95</th><th>Min</th><th>Max</th><th>Aprovações</th></tr></thead><tbody>';
-  for (const [proto, rows] of Object.entries(results)) {
-    const valid = rows.filter((r) => r.ms >= 0);
-    const st = computeLoadTestStats(valid.map((r) => r.ms));
-    const approved = rows.filter((r) => r.status === "APPROVED").length;
-    if (!st) {
-      html += `<tr><td>${proto.toUpperCase()}</td><td colspan="7">sem dados</td></tr>`;
-      continue;
-    }
-    html += `<tr>
-      <td><span class="proto-badge">${proto.toUpperCase()}</span></td>
-      <td>${st.n}</td><td>${st.mean}</td><td>${st.p50}</td><td>${st.p95}</td>
-      <td>${st.min}</td><td>${st.max}</td>
-      <td>${approved}/${rows.length}</td>
-    </tr>`;
-  }
-  html += "</tbody></table>";
-  el.innerHTML = html;
-}
-
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 let _historyAll = [];
 let _histPage = 1;
@@ -641,20 +498,34 @@ function renderStatsTable(stats) {
   for (const proto of ["grpc", "rest"]) {
     const s = stats[proto];
     if (!s) {
-      tbody.innerHTML += `<tr><td><span class="proto-badge">${proto.toUpperCase()}</span></td><td colspan="7" class="text-muted">sem dados</td></tr>`;
+      tbody.innerHTML += `<tr><td><span class="proto-badge">${proto.toUpperCase()}</span></td><td class="text-muted lat-type">interna</td><td colspan="6" class="text-muted">sem dados</td></tr>`;
       continue;
     }
     const approvalPct = (s.approval_rate * 100).toFixed(1);
+    // internal (gateway) row
     tbody.innerHTML += `<tr>
-      <td><span class="proto-badge">${proto.toUpperCase()}</span></td>
+      <td rowspan="${s.ext_count ? 2 : 1}"><span class="proto-badge">${proto.toUpperCase()}</span></td>
+      <td class="lat-type text-muted">interna</td>
       <td>${s.count}</td>
       <td class="num">${s.mean}</td>
       <td class="num">${s.median}</td>
       <td class="num">${s.p95}</td>
       <td class="num">${s.min}</td>
       <td class="num">${s.max}</td>
-      <td><span class="approval-badge ${approvalPct >= 50 ? "good" : "bad"}">${approvalPct}%</span></td>
+      <td rowspan="${s.ext_count ? 2 : 1}"><span class="approval-badge ${approvalPct >= 50 ? "good" : "bad"}">${approvalPct}%</span></td>
     </tr>`;
+    // external (client-side) row — only when data exists
+    if (s.ext_count) {
+      tbody.innerHTML += `<tr>
+        <td class="lat-type lat-ext">externa</td>
+        <td>${s.ext_count}</td>
+        <td class="num">${s.ext_mean}</td>
+        <td class="num">${s.ext_median}</td>
+        <td class="num">${s.ext_p95}</td>
+        <td class="num">${s.ext_min}</td>
+        <td class="num">${s.ext_max}</td>
+      </tr>`;
+    }
   }
 }
 
@@ -689,6 +560,8 @@ function renderBars(stats) {
 
   drawDuo("bars-mean", grpc?.mean, rest?.mean, " ms");
   drawDuo("bars-p95", grpc?.p95, rest?.p95, " ms");
+  drawDuo("bars-mean-ext", grpc?.ext_mean ?? null, rest?.ext_mean ?? null, " ms");
+  drawDuo("bars-p95-ext", grpc?.ext_p95 ?? null, rest?.ext_p95 ?? null, " ms");
   drawDuo(
     "bars-approval",
     grpc ? +(grpc.approval_rate * 100).toFixed(1) : null,
@@ -725,12 +598,14 @@ function renderHistoryTable() {
     const curr = r.currency || "BRL";
     const reason = r.reason || r.merchant;
 
+    const extMs = r.client_latency_ms != null ? `${r.client_latency_ms} ms` : "—";
     tbody.innerHTML += `<tr>
       <td class="text-mono">${time}</td>
       <td><span class="proto-badge">${r.protocol.toUpperCase()}</span></td>
       <td>${statusBadge}</td>
       <td class="num">${curr} ${(+r.amount).toFixed(2)}</td>
       <td class="num">${r.latency_ms} ms</td>
+      <td class="num">${extMs}</td>
       <td class="num">${r.antifraud_ms} ms</td>
       <td class="num">${r.authorizer_ms} ms</td>
       <td><span class="badge ${r.risk_level}">${r.risk_level}</span></td>

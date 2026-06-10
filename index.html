@@ -23,13 +23,6 @@
           </button>
           <button
             class="tab-btn"
-            data-tab="loadtest"
-            onclick="switchTab('loadtest')"
-          >
-            Teste de Carga
-          </button>
-          <button
-            class="tab-btn"
             data-tab="dashboard"
             onclick="switchTab('dashboard')"
           >
@@ -270,61 +263,6 @@
           </section>
         </section>
 
-        <!-- ═══════════════════ VIEW: LOAD TEST ═══════════════════ -->
-        <section id="view-loadtest" class="loadtest-container" hidden>
-          <div class="lt-card">
-            <h2 class="lt-card-title">Teste de Carga — gRPC vs REST</h2>
-            <div class="lt-card-body">
-              <div class="field-row two-col">
-                <div class="field-group">
-                  <label for="lt-n">Requisições por protocolo <small style="font-weight:normal;opacity:.7">(total = N × protocolos)</small></label>
-                  <input type="number" id="lt-n" value="20" min="1" max="500" />
-                </div>
-                <div class="field-group">
-                  <label for="lt-protocol">Protocolo</label>
-                  <select id="lt-protocol">
-                    <option value="both">Ambos (gRPC + REST)</option>
-                    <option value="grpc">Somente gRPC</option>
-                    <option value="rest">Somente REST</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field-row two-col">
-                <div class="field-group">
-                  <label for="lt-concurrency">Conexões simultâneas <small style="font-weight:normal;opacity:.7">(browser, aprox. — use perf_compare.py para medição precisa)</small></label>
-                  <input
-                    type="number"
-                    id="lt-concurrency"
-                    value="1"
-                    min="1"
-                    max="50"
-                  />
-                </div>
-                <div class="field-group">
-                  <label for="lt-scenario">Cenário de teste</label>
-                  <select id="lt-scenario"></select>
-                </div>
-              </div>
-              <button
-                type="button"
-                id="lt-btn"
-                class="lt-run-btn"
-                onclick="runLoadTest()"
-              >
-                <span id="lt-btn-text">Rodar Teste de Carga</span>
-                <span id="lt-spinner" class="spinner hidden"></span>
-              </button>
-              <div id="lt-progress" class="lt-progress hidden">
-                <div class="lt-bar-track">
-                  <div class="lt-bar-fill" id="lt-bar-fill"></div>
-                </div>
-                <span id="lt-status" class="lt-status-text"></span>
-              </div>
-              <div id="lt-summary" class="lt-summary hidden"></div>
-            </div>
-          </div>
-        </section>
-
         <!-- ═══════════════════ VIEW: DASHBOARD ═══════════════════ -->
         <section id="view-dashboard" class="dashboard-container" hidden>
           <div class="dash-toolbar">
@@ -342,8 +280,8 @@
           <div id="dash-verdict" class="dash-verdict hidden"></div>
 
           <div id="dash-empty" class="dash-empty">
-            Nenhuma requisição registrada. Faça um pagamento ou rode um teste de
-            carga.
+            Nenhuma requisição registrada. Faça um pagamento ou rode
+            <code>perf_compare.py</code> para popular o comparativo.
           </div>
 
           <!-- Stats comparison table -->
@@ -354,6 +292,7 @@
                 <thead>
                   <tr>
                     <th>Protocolo</th>
+                    <th title="interna = gateway; externa = cliente">Tipo</th>
                     <th>Requisições</th>
                     <th>Média</th>
                     <th>p50</th>
@@ -373,12 +312,20 @@
             <h3 class="dash-section-title">Comparativo Visual</h3>
             <div class="bars-grid">
               <div class="bar-metric">
-                <div class="bar-metric-label">Latência Média (ms)</div>
+                <div class="bar-metric-label">Latência Média — interna (ms)</div>
                 <div class="bars-duo" id="bars-mean"></div>
               </div>
               <div class="bar-metric">
-                <div class="bar-metric-label">p95 Latência (ms)</div>
+                <div class="bar-metric-label">p95 Latência — interna (ms)</div>
                 <div class="bars-duo" id="bars-p95"></div>
+              </div>
+              <div class="bar-metric">
+                <div class="bar-metric-label">Latência Média — externa/cliente (ms)</div>
+                <div class="bars-duo" id="bars-mean-ext"></div>
+              </div>
+              <div class="bar-metric">
+                <div class="bar-metric-label">p95 Latência — externa/cliente (ms)</div>
+                <div class="bars-duo" id="bars-p95-ext"></div>
               </div>
               <div class="bar-metric">
                 <div class="bar-metric-label">Taxa de Aprovação (%)</div>
@@ -401,7 +348,8 @@
                     <th>Protocolo</th>
                     <th>Status</th>
                     <th>Valor</th>
-                    <th>Latência</th>
+                    <th title="Tempo interno do gateway (microserviços)">Lat. interna</th>
+                    <th title="Round-trip do cliente">Lat. externa</th>
                     <th>Antifraude</th>
                     <th>Autorizador</th>
                     <th>Risco</th>
